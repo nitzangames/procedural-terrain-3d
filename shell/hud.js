@@ -1,0 +1,51 @@
+export function buildHUD(parent) {
+  const root = document.createElement('div');
+  root.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; font-family:ui-monospace,Menlo,monospace;
+    color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6);
+  `;
+  root.innerHTML = `
+    <div id="hud-fps" style="position:absolute;top:8px;left:8px;font-size:13px;opacity:.85"></div>
+    <div id="hud-alt" style="position:absolute;top:8px;right:8px;font-size:13px;opacity:.85"></div>
+    <div id="hud-compass" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:.4em">N</div>
+  `;
+  parent.appendChild(root);
+  const fpsEl = root.querySelector('#hud-fps');
+  const altEl = root.querySelector('#hud-alt');
+  const cmpEl = root.querySelector('#hud-compass');
+  let frames = 0, last = performance.now(), fps = 0;
+  return {
+    update(camera, dt) {
+      frames++;
+      const now = performance.now();
+      if (now - last >= 500) {
+        fps = (frames * 1000 / (now - last)) | 0;
+        frames = 0; last = now;
+      }
+      fpsEl.textContent = fps + ' fps';
+      altEl.textContent = (camera.position.y | 0) + ' m';
+      cmpEl.textContent = compassChar(headingFromCamera(camera));
+    },
+    dispose() { parent.removeChild(root); },
+  };
+}
+
+// Heading derived directly from camera.quaternion (no dependence on matrixWorld being up to date).
+// Returns radians in [0, 2π) where 0 = looking toward world -Z (north).
+function headingFromCamera(camera) {
+  const q = camera.quaternion;
+  // Apply quaternion to (0, 0, -1):
+  //   x' = -2 * (q.x * q.z + q.w * q.y)
+  //   z' = -(1 - 2 * (q.x*q.x + q.y*q.y))
+  const x = -2 * (q.x * q.z + q.w * q.y);
+  const z = -(1 - 2 * (q.x * q.x + q.y * q.y));
+  let h = Math.atan2(x, -z);
+  if (h < 0) h += Math.PI * 2;
+  return h;
+}
+
+function compassChar(heading) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const idx = Math.round(heading / (Math.PI / 4)) % 8;
+  return dirs[idx];
+}

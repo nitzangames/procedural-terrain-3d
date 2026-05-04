@@ -2153,29 +2153,22 @@ export function buildHUD(parent) {
       }
       fpsEl.textContent = fps + ' fps';
       altEl.textContent = (camera.position.y | 0) + ' m';
-      const heading = (Math.atan2(-camera.position.x + (camera.position.x - 1), 1) + Math.PI) % (Math.PI * 2);
-      // Compute heading from camera quaternion forward
-      const f = new (camera.quaternion.constructor === Object ? Object : globalThis.THREE.Vector3 ? globalThis.THREE.Vector3 : Object)();
-      // Fallback below — we'll compute via the camera matrix in the shell main loop.
       cmpEl.textContent = compassChar(headingFromCamera(camera));
     },
     dispose() { parent.removeChild(root); },
   };
 }
 
+// Heading derived directly from camera.quaternion (no dependence on matrixWorld being up to date).
+// Returns radians in [0, 2π) where 0 = looking toward world -Z (north).
 function headingFromCamera(camera) {
-  // Forward in world: -Z transformed by camera quaternion.
   const q = camera.quaternion;
-  // Apply quaternion to (0,0,-1)
-  const ix =  2 * (q.y * 0 - q.z * 0);
-  const iy =  2 * (q.z * 0 - q.x * 0);
-  const iz = -1 + 2 * (q.x * 0 + q.y * 0);
-  // (Simplified: we'll re-derive in main loop with vector math.)
-  // Heading 0 = north (-Z), increasing clockwise.
-  // Easier: use the camera's matrix:
-  const m = camera.matrixWorld.elements;
-  const fx = -m[8], fz = -m[10];
-  let h = Math.atan2(fx, -fz); // 0 when looking -Z
+  // Apply quaternion to (0, 0, -1):
+  //   x' = -2 * (q.x * q.z + q.w * q.y)
+  //   z' = -(1 - 2 * (q.x*q.x + q.y*q.y))
+  const x = -2 * (q.x * q.z + q.w * q.y);
+  const z = -(1 - 2 * (q.x * q.x + q.y * q.y));
+  let h = Math.atan2(x, -z);
   if (h < 0) h += Math.PI * 2;
   return h;
 }
@@ -2190,7 +2183,7 @@ function compassChar(heading) {
 - [ ] **Step 2: Commit**
 
 ```bash
-git add shell/hud.js
+git add shell/hud.js docs/superpowers/plans/2026-05-04-procedural-terrain-3d.md
 git commit -m "feat(shell): HUD overlay (fps, altitude, compass)"
 ```
 
