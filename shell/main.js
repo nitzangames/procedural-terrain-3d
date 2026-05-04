@@ -11,7 +11,9 @@ const boot = document.getElementById('boot');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(60, 1, 0.5, 6000);
+// near=1, far=4500 keeps the depth-buffer ratio at ~4500:1 (was 12000:1 with 0.5/6000),
+// which fixes horizon flicker from poor depth precision at long distances.
+const camera = new THREE.PerspectiveCamera(60, 1, 1, 4500);
 camera.position.set(0, 60, 0);
 camera.rotation.order = 'YXZ';
 
