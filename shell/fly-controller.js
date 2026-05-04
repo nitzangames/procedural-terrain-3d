@@ -7,13 +7,23 @@ const KEY_MAP = {
   Space: 'up', ShiftLeft: 'boost', ShiftRight: 'boost', KeyQ: 'down', KeyE: 'up',
 };
 
+// How fast the camera transform catches up to input (smoothing time constant in seconds).
+// Lower = snappier; higher = smoother but laggier. Mouse polling at 1000 Hz vs render at
+// 120 Hz means raw event accumulation jitters frame-to-frame; lerping toward the target
+// absorbs that without noticeable lag. Same trick as MiniGT / HotLap camera follow.
+const SMOOTH_TAU = 0.040;
+
 export class FlyController {
   constructor({ THREE, camera, domElement }) {
     this.THREE = THREE;
     this.camera = camera;
     this.dom = domElement;
+    // Targets — accumulated by input handlers
     this.yaw = 0;
     this.pitch = 0;
+    // Smoothed transform — what the camera actually uses
+    this.smoothedYaw = 0;
+    this.smoothedPitch = 0;
     this.speed = 80;            // m/s base
     this.boost = false;
     this.input = { fwd: 0, back: 0, left: 0, right: 0, up: 0, down: 0 };
@@ -21,8 +31,17 @@ export class FlyController {
     this._touch = { lookId: null, lookLastX: 0, lookLastY: 0,
                     stickId: null, stickStartX: 0, stickStartY: 0, stickX: 0, stickY: 0,
                     pinchA: null, pinchB: null, pinchStartDist: 0, pinchStartSpeed: 0 };
-    this._tmpVec = new THREE.Vector3();
-    this._tmpQuat = new THREE.Quaternion();
+    // Pre-allocated working objects so update() never allocates per frame
+    this._yawQ = new THREE.Quaternion();
+    this._pitchQ = new THREE.Quaternion();
+    this._yawAxis = new THREE.Vector3(0, 1, 0);
+    this._pitchAxis = new THREE.Vector3(1, 0, 0);
+    this._fwd = new THREE.Vector3();
+    this._right = new THREE.Vector3();
+    this._up = new THREE.Vector3(0, 1, 0);
+    this._move = new THREE.Vector3();
+    this._smoothedVel = new THREE.Vector3();
+    this._targetVel = new THREE.Vector3();
     this._bind();
   }
 
@@ -128,21 +147,35 @@ export class FlyController {
   setBoost(on) { this.boost = !!on; }
 
   update(dt) {
-    const yawQ = new this.THREE.Quaternion().setFromAxisAngle(new this.THREE.Vector3(0, 1, 0), this.yaw);
-    const pitchQ = new this.THREE.Quaternion().setFromAxisAngle(new this.THREE.Vector3(1, 0, 0), this.pitch);
-    this.camera.quaternion.copy(yawQ).multiply(pitchQ);
+    // Frame-rate-independent exponential smoothing toward target yaw/pitch.
+    // k = 1 - exp(-dt / tau)  →  smaller tau = snappier, larger = smoother.
+    const k = 1 - Math.exp(-dt / SMOOTH_TAU);
+    this.smoothedYaw   += (this.yaw   - this.smoothedYaw)   * k;
+    this.smoothedPitch += (this.pitch - this.smoothedPitch) * k;
+
+    this._yawQ.setFromAxisAngle(this._yawAxis,   this.smoothedYaw);
+    this._pitchQ.setFromAxisAngle(this._pitchAxis, this.smoothedPitch);
+    this.camera.quaternion.copy(this._yawQ).multiply(this._pitchQ);
 
     const speed = this.speed * (this.boost ? 3 : 1);
-    const fwd = new this.THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-    const right = new this.THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-    const up = new this.THREE.Vector3(0, 1, 0);
-    const move = new this.THREE.Vector3();
-    move.addScaledVector(fwd,   (this.input.fwd  - this.input.back));
-    move.addScaledVector(right, (this.input.right - this.input.left));
-    move.addScaledVector(up,    (this.input.up   - this.input.down));
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(speed * dt);
-      this.camera.position.add(move);
+    this._fwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+    this._right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
+
+    // Build the desired velocity from input, then smooth it the same way as look —
+    // this absorbs dt jitter so position glides instead of stepping by uneven amounts.
+    this._targetVel.set(0, 0, 0);
+    this._targetVel.addScaledVector(this._fwd,   (this.input.fwd  - this.input.back));
+    this._targetVel.addScaledVector(this._right, (this.input.right - this.input.left));
+    this._targetVel.addScaledVector(this._up,    (this.input.up   - this.input.down));
+    if (this._targetVel.lengthSq() > 0) {
+      this._targetVel.normalize().multiplyScalar(speed);
     }
+    this._smoothedVel.x += (this._targetVel.x - this._smoothedVel.x) * k;
+    this._smoothedVel.y += (this._targetVel.y - this._smoothedVel.y) * k;
+    this._smoothedVel.z += (this._targetVel.z - this._smoothedVel.z) * k;
+
+    this.camera.position.x += this._smoothedVel.x * dt;
+    this.camera.position.y += this._smoothedVel.y * dt;
+    this.camera.position.z += this._smoothedVel.z * dt;
   }
 }
