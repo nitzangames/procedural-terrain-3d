@@ -8,7 +8,7 @@ const puppeteer = require('/usr/local/lib/node_modules/puppeteer');
   // Visit origin once so localStorage exists for setItem
   await page.goto('http://localhost:8080/', { waitUntil: 'load' });
   await page.evaluate(() => localStorage.setItem('terrain.style', 'lowpoly'));
-  await page.goto('http://localhost:8080?seed=thumbnail99', { waitUntil: 'networkidle2' });
+  await page.goto('http://localhost:8080?seed=thumbnail99&capture=1', { waitUntil: 'networkidle2' });
   await new Promise(r => setTimeout(r, 5000));
   await page.screenshot({ path: '/Users/nitzanwilnai/Programming/Claude/JSGames/ProceduralTerrain3D/thumbnail.png' });
   await browser.close();

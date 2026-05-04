@@ -35,9 +35,12 @@ const terrain = createTerrain({
   perfMode: 'high',
 });
 
+// Capture mode: ?capture=1 hides HUD + settings (used for thumbnails / fixtures)
+const captureMode = new URLSearchParams(location.search).get('capture') === '1';
+
 const fly = new FlyController({ THREE, camera, domElement: canvas });
-const hud = buildHUD(document.body);
-const settings = buildSettings({
+const hud = captureMode ? null : buildHUD(document.body);
+const settings = captureMode ? null : buildSettings({
   parent: document.body,
   initialStyle,
   onStyleChange: (s) => terrain.setStyle(s),
@@ -59,7 +62,7 @@ function frame() {
 
   fly.update(dt);
   terrain.update(camera.position);
-  hud.update(camera, dt);
+  if (hud) hud.update(camera, dt);
   probe.tick();
 
   renderer.render(scene, camera);
