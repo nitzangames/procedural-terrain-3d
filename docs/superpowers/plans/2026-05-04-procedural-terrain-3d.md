@@ -452,6 +452,24 @@ describe('buildRiverGraph', () => {
     const g = buildRiverGraph({ seed: 15, gridN: 64, worldSize: 16000 });
     expect(Array.isArray(g.lakes)).toBe(true);
   });
+
+  it('does not mis-attribute lakes to unrelated segments', () => {
+    // Bug repro: when a river source is itself a basin, the prior fix
+    // mistakenly marked an unrelated previous-trace segment as endsInLake.
+    // Now verify that endsInLake is set only on segments whose end-point
+    // (x1, z1) is actually a lake center.
+    const g = buildRiverGraph({ seed: 13, gridN: 64, worldSize: 16000 });
+    for (const s of g.segments) {
+      if (!s.endsInLake) continue;
+      // The segment must end near at least one lake center
+      let near = false;
+      for (const l of g.lakes) {
+        const d = Math.hypot(s.x1 - l.x, s.z1 - l.z);
+        if (d <= l.radius + 60) { near = true; break; }
+      }
+      expect(near).toBe(true);
+    }
+  });
 });
 ```
 
@@ -571,6 +589,7 @@ export function buildRiverGraph({ seed, gridN = 256, worldSize = 64000, threshol
 
       // Walk downstream
       let ci = i, cj = j;
+      let lastSegOfTrace = null;     // segment from THIS trace (do not touch others)
       while (true) {
         const cIdx = cj * gridN + ci;
         if (visited[cIdx]) break;
@@ -581,10 +600,9 @@ export function buildRiverGraph({ seed, gridN = 256, worldSize = 64000, threshol
           const [lx, lz] = cellToWorld(ci, cj, gridN, worldSize);
           const radius = Math.max(60, Math.sqrt(accum[cIdx]) * 8);
           lakes.push({ x: lx, z: lz, level: heights[cIdx], radius });
-          if (segments.length > 0) {
-            const last = segments[segments.length - 1];
-            last.endsInLake = true;
-            last.isTerminal = true;
+          if (lastSegOfTrace !== null) {
+            lastSegOfTrace.endsInLake = true;
+            lastSegOfTrace.isTerminal = true;
           }
           break;
         }
@@ -594,6 +612,7 @@ export function buildRiverGraph({ seed, gridN = 256, worldSize = 64000, threshol
         const width = Math.max(2, Math.sqrt(accum[cIdx]) * 0.6);
         const seg = { x0, z0, x1, z1, width, isTerminal: false, endsInLake: false };
         segments.push(seg);
+        lastSegOfTrace = seg;
 
         const nIdx = nj * gridN + ni;
         // If next cell is below water, mark this segment terminal (river meets ocean).
