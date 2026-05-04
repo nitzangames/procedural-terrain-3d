@@ -13,16 +13,22 @@ export function buildHUD(parent) {
   const fpsEl = root.querySelector('#hud-fps');
   const altEl = root.querySelector('#hud-alt');
   const cmpEl = root.querySelector('#hud-compass');
+  // Track avg fps AND worst single-frame time per window — average alone hides stutter.
   let frames = 0, last = performance.now(), fps = 0;
+  let lastFrame = performance.now(), maxMs = 0, worstMs = 0;
   return {
     update(camera, dt) {
       frames++;
       const now = performance.now();
+      const frameMs = now - lastFrame;
+      lastFrame = now;
+      if (frameMs > maxMs) maxMs = frameMs;
       if (now - last >= 500) {
         fps = (frames * 1000 / (now - last)) | 0;
-        frames = 0; last = now;
+        worstMs = maxMs | 0;
+        frames = 0; last = now; maxMs = 0;
       }
-      fpsEl.textContent = fps + ' fps';
+      fpsEl.textContent = `${fps} fps  ${worstMs}ms peak`;
       altEl.textContent = (camera.position.y | 0) + ' m';
       cmpEl.textContent = compassChar(headingFromCamera(camera));
     },
