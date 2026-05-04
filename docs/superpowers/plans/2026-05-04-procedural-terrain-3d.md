@@ -711,7 +711,7 @@ Expected: all tests fail (module missing).
 - [ ] **Step 3: Implement `lib/terrain/carve.js`**
 
 ```js
-// Squared distance from point P to segment AB in 2D.
+// Euclidean distance from point P to segment AB in 2D.
 export function distancePointToSegment2D(px, pz, ax, az, bx, bz) {
   const dx = bx - ax, dz = bz - az;
   const len2 = dx * dx + dz * dz;
