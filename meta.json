@@ -1,8 +1,8 @@
 {
   "slug": "procedural-terrain",
   "title": "Procedural Terrain",
-  "description": "A vast procedurally generated world. Fly anywhere — mountains, rivers, lakes, forests.",
-  "tags": ["3d", "procedural", "exploration", "sandbox"],
+  "description": "A vast procedurally generated world. Fly anywhere — snow-capped mountains, winding rivers, glittering lakes, and quiet forests stretch in every direction. Pick your style, set your seed, and roam.",
+  "tags": ["3d", "procedural", "exploration", "sandbox", "casual"],
   "author": "nitzanwilnai",
   "thumbnail": "thumbnail.png"
 }
