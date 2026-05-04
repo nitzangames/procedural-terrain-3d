@@ -125,12 +125,12 @@ Heightfield function (worker-side):
 
 ```
 height(x, z) =
-  fbm(x*F,   z*F,   seed₁) * 6                        // base hills
-+ ridge²(x*F*0.7, z*F*0.7, seed₂) * 32                 // mountains
-+ ridge³(x*F*0.25, z*F*0.25, seed₃) * (-10)            // basins for lakes
-- 6                                                     // bias so some areas dip under sea level
+  (fbm(x*F, z*F, seed₁) * 2 - 1) * 6                              // base hills, centered ±6
++ ridge(x*F*0.7, z*F*0.7, seed₂)^1.6 * 32                          // mountains
++ ridge(x*F*0.25 + 5, z*F*0.25 - 9, seed₃)^3 * (-10)               // basins / lakes
+- 6                                                                 // bias so some areas dip under sea level
 ```
-F ≈ 0.012 ⁻¹ m. `fbm` = 5-octave value noise, persistence 0.5. `ridge(n) = 1 − |2n − 1|`.
+F = 0.012 m⁻¹. `fbm` = 5-octave value noise with persistence 0.5. `ridge(n) = 1 − |2n − 1|`. `seed₁ = 1 ^ worldSeed`, `seed₂ = 7 ^ worldSeed`, `seed₃ = 23 ^ worldSeed`. Empirical range across many seeds: about [-14, 30].
 
 ### 4.5 Main-thread chunk receive (~1 ms)
 
