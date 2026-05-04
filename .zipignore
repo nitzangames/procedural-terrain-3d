@@ -1,0 +1,10 @@
+node_modules/
+.superpowers/
+docs/
+tests/
+vitest.config.js
+package-lock.json
+.git/
+.gitignore
+.DS_Store
+*.log
