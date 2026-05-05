@@ -1,4 +1,4 @@
-export function buildHUD(parent) {
+export function buildHUD(parent, version = '') {
   const root = document.createElement('div');
   root.style.cssText = `
     position:fixed; inset:0; pointer-events:none; font-family:ui-monospace,Menlo,monospace;
@@ -8,6 +8,7 @@ export function buildHUD(parent) {
     <div id="hud-fps" style="position:absolute;top:8px;left:8px;font-size:13px;opacity:.85"></div>
     <div id="hud-alt" style="position:absolute;top:8px;right:8px;font-size:13px;opacity:.85"></div>
     <div id="hud-compass" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:.4em">N</div>
+    <div id="hud-version" style="position:absolute;bottom:8px;left:8px;font-size:11px;opacity:.55">${version ? 'v' + version : ''}</div>
   `;
   parent.appendChild(root);
   const fpsEl = root.querySelector('#hud-fps');

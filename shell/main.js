@@ -4,6 +4,10 @@ import { buildHUD } from './hud.js';
 import { buildSettings } from './settings.js';
 import { PerfProbe } from './perf-probe.js';
 
+// Bump on every user-visible fix so the HUD reflects whether the page is on latest code.
+const VERSION = '0.5.0';
+console.log('[procedural-terrain] v' + VERSION);
+
 const THREE = window.THREE;
 const canvas = document.getElementById('game');
 const boot = document.getElementById('boot');
@@ -41,7 +45,7 @@ const terrain = createTerrain({
 const captureMode = new URLSearchParams(location.search).get('capture') === '1';
 
 const fly = new FlyController({ THREE, camera, domElement: canvas });
-const hud = captureMode ? null : buildHUD(document.body);
+const hud = captureMode ? null : buildHUD(document.body, VERSION);
 const settings = captureMode ? null : buildSettings({
   parent: document.body,
   initialStyle,
