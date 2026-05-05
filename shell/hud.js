@@ -10,7 +10,7 @@ export function buildHUD(parent, version = '') {
     <div id="hud-alt" style="position:absolute;top:8px;right:8px;font-size:13px;opacity:.85"></div>
     <div id="hud-compass" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:13px;letter-spacing:.4em">N</div>
     <div id="hud-version" style="position:absolute;bottom:8px;left:8px;font-size:11px;opacity:.55">${version ? 'v' + version : ''}</div>
-    <div id="hud-debug" style="position:absolute;bottom:8px;right:8px;font-size:11px;opacity:.85;text-align:right;line-height:1.5;display:${debug ? 'block' : 'none'};background:rgba(0,0,0,.4);padding:6px 8px;border-radius:4px"></div>
+    <div id="hud-debug" style="position:absolute;bottom:80px;left:8px;font-size:11px;opacity:.85;line-height:1.5;display:${debug ? 'block' : 'none'};background:rgba(0,0,0,.4);padding:6px 8px;border-radius:4px"></div>
   `;
   parent.appendChild(root);
   const fpsEl = root.querySelector('#hud-fps');
