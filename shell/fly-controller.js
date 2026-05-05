@@ -179,6 +179,15 @@ export class FlyController {
       dy = this._mouseLook.latestY - this._mouseLook.lastSampledY;
       this._mouseLook.lastSampledX = this._mouseLook.latestX;
       this._mouseLook.lastSampledY = this._mouseLook.latestY;
+      // Clamp huge per-frame deltas. A normal fast swipe at 120 fps is ~30 px/frame;
+      // anything beyond MAX_DELTA_PX is almost certainly a stall-recovery artifact (the
+      // tab missed several rAFs while events kept firing) — applying it whips the
+      // camera. Discarding the excess loses a tiny bit of motion but feels much better.
+      const MAX_DELTA_PX = 60;
+      if (dx >  MAX_DELTA_PX) dx =  MAX_DELTA_PX;
+      if (dx < -MAX_DELTA_PX) dx = -MAX_DELTA_PX;
+      if (dy >  MAX_DELTA_PX) dy =  MAX_DELTA_PX;
+      if (dy < -MAX_DELTA_PX) dy = -MAX_DELTA_PX;
       if (dx !== 0 || dy !== 0) {
         this.yaw   -= dx * 0.0025;
         this.pitch -= dy * 0.0025;
