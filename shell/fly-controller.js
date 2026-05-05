@@ -51,19 +51,36 @@ export class FlyController {
     addEventListener('wheel',   (e) => { this.speed = Math.max(20, Math.min(800, this.speed * (e.deltaY < 0 ? 1.15 : 0.87))); }, { passive: true });
 
     const dom = this.dom;
-    dom.addEventListener('mousedown', (e) => { this._mouseLook.active = true; this._mouseLook.lastX = e.clientX; this._mouseLook.lastY = e.clientY; });
-    addEventListener('mouseup',   () => { this._mouseLook.active = false; });
-    addEventListener('mousemove', (e) => {
-      if (!this._mouseLook.active) return;
+    // Mouse drag-to-look uses Pointer Events with setPointerCapture so pointermove is
+    // vsync-throttled by the browser (one event per frame). Plain mousemove fires at OS
+    // rate (1000 Hz on macOS) and produces visible micro-stutter even at 120 fps.
+    dom.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      this._mouseLook.active = true;
+      this._mouseLook.lastX = e.clientX;
+      this._mouseLook.lastY = e.clientY;
+      try { dom.setPointerCapture(e.pointerId); } catch {}
+    });
+    dom.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || !this._mouseLook.active) return;
       const dx = e.clientX - this._mouseLook.lastX;
       const dy = e.clientY - this._mouseLook.lastY;
-      this._mouseLook.lastX = e.clientX; this._mouseLook.lastY = e.clientY;
+      this._mouseLook.lastX = e.clientX;
+      this._mouseLook.lastY = e.clientY;
       this.yaw   -= dx * 0.0025;
       this.pitch -= dy * 0.0025;
       this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch));
     });
+    const releaseMouse = (e) => {
+      if (e.pointerType !== 'mouse') return;
+      this._mouseLook.active = false;
+      try { if (dom.hasPointerCapture(e.pointerId)) dom.releasePointerCapture(e.pointerId); } catch {}
+    };
+    dom.addEventListener('pointerup',     releaseMouse);
+    dom.addEventListener('pointercancel', releaseMouse);
 
-    // Touch
+    // Touch (multi-pointer logic stays on touch events — pointer events would require
+    // refactoring stick + look + pinch tracking; touch events already work reasonably)
     dom.addEventListener('touchstart', (e) => this._onTouchStart(e), { passive: false });
     dom.addEventListener('touchmove',  (e) => this._onTouchMove(e),  { passive: false });
     dom.addEventListener('touchend',   (e) => this._onTouchEnd(e),   { passive: false });
