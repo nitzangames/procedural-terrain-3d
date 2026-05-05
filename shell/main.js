@@ -5,7 +5,7 @@ import { buildSettings } from './settings.js';
 import { PerfProbe } from './perf-probe.js';
 
 // Bump on every user-visible fix so the HUD reflects whether the page is on latest code.
-const VERSION = '0.11.1';
+const VERSION = '0.12.0';
 console.log('[procedural-terrain] v' + VERSION);
 
 const THREE = window.THREE;
@@ -33,7 +33,8 @@ resize();
 // Determine initial style
 const settingsKey = 'terrain.style';
 const storedStyle = localStorage.getItem(settingsKey);
-const initialStyle = storedStyle === 'stylized' || storedStyle === 'realistic' ? storedStyle : 'lowpoly';
+const VALID_STYLES = new Set(['lowpoly', 'stylized', 'realistic', 'ww1']);
+const initialStyle = VALID_STYLES.has(storedStyle) ? storedStyle : 'lowpoly';
 
 const terrain = createTerrain({
   THREE, scene, renderer,

@@ -12,6 +12,7 @@ export function buildSettings({ parent, initialStyle, onStyleChange }) {
       <button data-style="lowpoly" class="set-btn">Low-poly</button>
       <button data-style="stylized" class="set-btn">Stylized</button>
       <button data-style="realistic" class="set-btn">Realistic</button>
+      <button data-style="ww1" class="set-btn">WW1</button>
     </div>
   `;
   parent.appendChild(root);
