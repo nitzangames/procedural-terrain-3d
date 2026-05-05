@@ -1,43 +1,39 @@
 // Free-fly camera input. Mutates a target THREE.PerspectiveCamera each frame.
 // Desktop: WASD + mouse drag-to-look + wheel-throttle + shift-boost.
 // Mobile: split-screen virtual stick (left) + drag-to-look (right) + pinch throttle + boost button.
+//
+// Mouse input model (Boba-Drop-style polling):
+// - Pointer event handlers do ZERO math. They just store the latest clientX/Y.
+// - update() samples the latest position once per frame and computes a single delta from
+//   the last frame's sample. The OS may deliver any number of events between two frames;
+//   per-frame sampling guarantees one delta per frame regardless of event timing, which
+//   removes the per-frame jitter that comes from variable event counts.
 
 const KEY_MAP = {
   KeyW: 'fwd', KeyA: 'left', KeyS: 'back', KeyD: 'right',
-  ShiftLeft: 'boost', ShiftRight: 'boost', KeyQ: 'down', KeyE: 'up',
+  Space: 'up', ShiftLeft: 'boost', ShiftRight: 'boost', KeyQ: 'down', KeyE: 'up',
 };
-
-// Arrow keys add to a continuous yaw rotation rate (radians/sec). Each press steps the
-// rate by YAW_RATE_STEP; Space resets it to 0. Capped at YAW_RATE_MAX so it can't run away.
-const YAW_RATE_STEP = 0.30;     // rad/s per press (~17°/s)
-const YAW_RATE_MAX  = 2.0;      // rad/s cap (~115°/s)
-
-// How fast the camera transform catches up to input (smoothing time constant in seconds).
-// Lower = snappier; higher = smoother but laggier. Mouse polling at 1000 Hz vs render at
-// 120 Hz means raw event accumulation jitters frame-to-frame; lerping toward the target
-// absorbs that without noticeable lag. Same trick as MiniGT / HotLap camera follow.
-const SMOOTH_TAU = 0.040;
 
 export class FlyController {
   constructor({ THREE, camera, domElement }) {
     this.THREE = THREE;
     this.camera = camera;
     this.dom = domElement;
-    // Targets — accumulated by input handlers
     this.yaw = 0;
     this.pitch = 0;
-    this.yawRate = 0;           // rad/s, modified by left/right arrows; reset by space
-    // Smoothed transform — what the camera actually uses
-    this.smoothedYaw = 0;
-    this.smoothedPitch = 0;
     this.speed = 80;            // m/s base
     this.boost = false;
     this.input = { fwd: 0, back: 0, left: 0, right: 0, up: 0, down: 0 };
-    this._mouseLook = { active: false, lastX: 0, lastY: 0 };
+    // Mouse drag state — handlers only store position; update() reads it.
+    this._mouseLook = {
+      active: false,
+      latestX: 0, latestY: 0,        // most recent pointer position from any event
+      lastSampledX: 0, lastSampledY: 0, // position at the previous frame's sample
+    };
     this._touch = { lookId: null, lookLastX: 0, lookLastY: 0,
                     stickId: null, stickStartX: 0, stickStartY: 0, stickX: 0, stickY: 0,
                     pinchA: null, pinchB: null, pinchStartDist: 0, pinchStartSpeed: 0 };
-    // Pre-allocated working objects so update() never allocates per frame
+    // Pre-allocated working objects so update() never allocates per frame.
     this._yawQ = new THREE.Quaternion();
     this._pitchQ = new THREE.Quaternion();
     this._yawAxis = new THREE.Vector3(0, 1, 0);
@@ -46,46 +42,30 @@ export class FlyController {
     this._right = new THREE.Vector3();
     this._up = new THREE.Vector3(0, 1, 0);
     this._move = new THREE.Vector3();
-    this._smoothedVel = new THREE.Vector3();
-    this._targetVel = new THREE.Vector3();
     this._bind();
   }
 
   _bind() {
-    addEventListener('keydown', (e) => {
-      // Continuous yaw rotation: arrow keys step the rate, space resets to 0. Ignore key
-      // repeats so holding a key doesn't slam the rate to max in a fraction of a second.
-      if (!e.repeat) {
-        if (e.code === 'ArrowLeft')  { e.preventDefault(); this.yawRate = Math.min( YAW_RATE_MAX, this.yawRate + YAW_RATE_STEP); return; }
-        if (e.code === 'ArrowRight') { e.preventDefault(); this.yawRate = Math.max(-YAW_RATE_MAX, this.yawRate - YAW_RATE_STEP); return; }
-        if (e.code === 'Space')      { e.preventDefault(); this.yawRate = 0; return; }
-      }
-      const m = KEY_MAP[e.code]; if (!m) return;
-      if (m === 'boost') this.boost = true; else this.input[m] = 1;
-    });
+    addEventListener('keydown', (e) => { const m = KEY_MAP[e.code]; if (!m) return; if (m === 'boost') this.boost = true; else this.input[m] = 1; });
     addEventListener('keyup',   (e) => { const m = KEY_MAP[e.code]; if (!m) return; if (m === 'boost') this.boost = false; else this.input[m] = 0; });
     addEventListener('wheel',   (e) => { this.speed = Math.max(20, Math.min(800, this.speed * (e.deltaY < 0 ? 1.15 : 0.87))); }, { passive: true });
 
     const dom = this.dom;
-    // Mouse drag-to-look uses Pointer Events with setPointerCapture so pointermove is
-    // vsync-throttled by the browser (one event per frame). Plain mousemove fires at OS
-    // rate (1000 Hz on macOS) and produces visible micro-stutter even at 120 fps.
+    // Mouse: handlers do no math, just record latest position. Pointer capture keeps
+    // events flowing if the cursor leaves the canvas during a drag.
     dom.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'mouse') return;
       this._mouseLook.active = true;
-      this._mouseLook.lastX = e.clientX;
-      this._mouseLook.lastY = e.clientY;
+      this._mouseLook.latestX = e.clientX;
+      this._mouseLook.latestY = e.clientY;
+      this._mouseLook.lastSampledX = e.clientX;
+      this._mouseLook.lastSampledY = e.clientY;
       try { dom.setPointerCapture(e.pointerId); } catch {}
     });
     dom.addEventListener('pointermove', (e) => {
       if (e.pointerType !== 'mouse' || !this._mouseLook.active) return;
-      const dx = e.clientX - this._mouseLook.lastX;
-      const dy = e.clientY - this._mouseLook.lastY;
-      this._mouseLook.lastX = e.clientX;
-      this._mouseLook.lastY = e.clientY;
-      this.yaw   -= dx * 0.0025;
-      this.pitch -= dy * 0.0025;
-      this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch));
+      this._mouseLook.latestX = e.clientX;
+      this._mouseLook.latestY = e.clientY;
     });
     const releaseMouse = (e) => {
       if (e.pointerType !== 'mouse') return;
@@ -96,7 +76,7 @@ export class FlyController {
     dom.addEventListener('pointercancel', releaseMouse);
 
     // Touch (multi-pointer logic stays on touch events — pointer events would require
-    // refactoring stick + look + pinch tracking; touch events already work reasonably)
+    // refactoring stick + look + pinch tracking; touch events already work reasonably).
     dom.addEventListener('touchstart', (e) => this._onTouchStart(e), { passive: false });
     dom.addEventListener('touchmove',  (e) => this._onTouchMove(e),  { passive: false });
     dom.addEventListener('touchend',   (e) => this._onTouchEnd(e),   { passive: false });
@@ -180,39 +160,39 @@ export class FlyController {
   setBoost(on) { this.boost = !!on; }
 
   update(dt) {
-    // Continuous yaw rotation from arrow keys (independent of mouse drag, which still
-    // adds directly to this.yaw via pointer events).
-    if (this.yawRate !== 0) this.yaw += this.yawRate * dt;
+    // ── Mouse look: poll the latest pointer position once per frame ──────────────
+    // The event handler stored latestX/Y; we compute one delta per frame here, no
+    // matter how many events fired in between. This keeps per-frame yaw deltas
+    // proportional to per-frame mouse motion (not to per-frame event count).
+    if (this._mouseLook.active) {
+      const dx = this._mouseLook.latestX - this._mouseLook.lastSampledX;
+      const dy = this._mouseLook.latestY - this._mouseLook.lastSampledY;
+      this._mouseLook.lastSampledX = this._mouseLook.latestX;
+      this._mouseLook.lastSampledY = this._mouseLook.latestY;
+      if (dx !== 0 || dy !== 0) {
+        this.yaw   -= dx * 0.0025;
+        this.pitch -= dy * 0.0025;
+        this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch));
+      }
+    }
 
-    // Frame-rate-independent exponential smoothing toward target yaw/pitch.
-    // k = 1 - exp(-dt / tau)  →  smaller tau = snappier, larger = smoother.
-    const k = 1 - Math.exp(-dt / SMOOTH_TAU);
-    this.smoothedYaw   += (this.yaw   - this.smoothedYaw)   * k;
-    this.smoothedPitch += (this.pitch - this.smoothedPitch) * k;
-
-    this._yawQ.setFromAxisAngle(this._yawAxis,   this.smoothedYaw);
-    this._pitchQ.setFromAxisAngle(this._pitchAxis, this.smoothedPitch);
+    this._yawQ.setFromAxisAngle(this._yawAxis,   this.yaw);
+    this._pitchQ.setFromAxisAngle(this._pitchAxis, this.pitch);
     this.camera.quaternion.copy(this._yawQ).multiply(this._pitchQ);
 
     const speed = this.speed * (this.boost ? 3 : 1);
     this._fwd.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     this._right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
 
-    // Build the desired velocity from input, then smooth it the same way as look —
-    // this absorbs dt jitter so position glides instead of stepping by uneven amounts.
-    this._targetVel.set(0, 0, 0);
-    this._targetVel.addScaledVector(this._fwd,   (this.input.fwd  - this.input.back));
-    this._targetVel.addScaledVector(this._right, (this.input.right - this.input.left));
-    this._targetVel.addScaledVector(this._up,    (this.input.up   - this.input.down));
-    if (this._targetVel.lengthSq() > 0) {
-      this._targetVel.normalize().multiplyScalar(speed);
+    this._move.set(0, 0, 0);
+    this._move.addScaledVector(this._fwd,   (this.input.fwd  - this.input.back));
+    this._move.addScaledVector(this._right, (this.input.right - this.input.left));
+    this._move.addScaledVector(this._up,    (this.input.up   - this.input.down));
+    if (this._move.lengthSq() > 0) {
+      this._move.normalize().multiplyScalar(speed * dt);
+      this.camera.position.x += this._move.x;
+      this.camera.position.y += this._move.y;
+      this.camera.position.z += this._move.z;
     }
-    this._smoothedVel.x += (this._targetVel.x - this._smoothedVel.x) * k;
-    this._smoothedVel.y += (this._targetVel.y - this._smoothedVel.y) * k;
-    this._smoothedVel.z += (this._targetVel.z - this._smoothedVel.z) * k;
-
-    this.camera.position.x += this._smoothedVel.x * dt;
-    this.camera.position.y += this._smoothedVel.y * dt;
-    this.camera.position.z += this._smoothedVel.z * dt;
   }
 }
