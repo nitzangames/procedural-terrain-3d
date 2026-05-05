@@ -4,8 +4,13 @@
 
 const KEY_MAP = {
   KeyW: 'fwd', KeyA: 'left', KeyS: 'back', KeyD: 'right',
-  Space: 'up', ShiftLeft: 'boost', ShiftRight: 'boost', KeyQ: 'down', KeyE: 'up',
+  ShiftLeft: 'boost', ShiftRight: 'boost', KeyQ: 'down', KeyE: 'up',
 };
+
+// Arrow keys add to a continuous yaw rotation rate (radians/sec). Each press steps the
+// rate by YAW_RATE_STEP; Space resets it to 0. Capped at YAW_RATE_MAX so it can't run away.
+const YAW_RATE_STEP = 0.30;     // rad/s per press (~17°/s)
+const YAW_RATE_MAX  = 2.0;      // rad/s cap (~115°/s)
 
 // How fast the camera transform catches up to input (smoothing time constant in seconds).
 // Lower = snappier; higher = smoother but laggier. Mouse polling at 1000 Hz vs render at
@@ -21,6 +26,7 @@ export class FlyController {
     // Targets — accumulated by input handlers
     this.yaw = 0;
     this.pitch = 0;
+    this.yawRate = 0;           // rad/s, modified by left/right arrows; reset by space
     // Smoothed transform — what the camera actually uses
     this.smoothedYaw = 0;
     this.smoothedPitch = 0;
@@ -46,7 +52,17 @@ export class FlyController {
   }
 
   _bind() {
-    addEventListener('keydown', (e) => { const m = KEY_MAP[e.code]; if (!m) return; if (m === 'boost') this.boost = true; else this.input[m] = 1; });
+    addEventListener('keydown', (e) => {
+      // Continuous yaw rotation: arrow keys step the rate, space resets to 0. Ignore key
+      // repeats so holding a key doesn't slam the rate to max in a fraction of a second.
+      if (!e.repeat) {
+        if (e.code === 'ArrowLeft')  { e.preventDefault(); this.yawRate = Math.min( YAW_RATE_MAX, this.yawRate + YAW_RATE_STEP); return; }
+        if (e.code === 'ArrowRight') { e.preventDefault(); this.yawRate = Math.max(-YAW_RATE_MAX, this.yawRate - YAW_RATE_STEP); return; }
+        if (e.code === 'Space')      { e.preventDefault(); this.yawRate = 0; return; }
+      }
+      const m = KEY_MAP[e.code]; if (!m) return;
+      if (m === 'boost') this.boost = true; else this.input[m] = 1;
+    });
     addEventListener('keyup',   (e) => { const m = KEY_MAP[e.code]; if (!m) return; if (m === 'boost') this.boost = false; else this.input[m] = 0; });
     addEventListener('wheel',   (e) => { this.speed = Math.max(20, Math.min(800, this.speed * (e.deltaY < 0 ? 1.15 : 0.87))); }, { passive: true });
 
@@ -164,6 +180,10 @@ export class FlyController {
   setBoost(on) { this.boost = !!on; }
 
   update(dt) {
+    // Continuous yaw rotation from arrow keys (independent of mouse drag, which still
+    // adds directly to this.yaw via pointer events).
+    if (this.yawRate !== 0) this.yaw += this.yawRate * dt;
+
     // Frame-rate-independent exponential smoothing toward target yaw/pitch.
     // k = 1 - exp(-dt / tau)  →  smaller tau = snappier, larger = smoother.
     const k = 1 - Math.exp(-dt / SMOOTH_TAU);
