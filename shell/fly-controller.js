@@ -34,7 +34,10 @@ export class FlyController {
       active: false,
       latestX: 0, latestY: 0,        // most recent pointer position from any event
       lastSampledX: 0, lastSampledY: 0, // position at the previous frame's sample
+      eventsThisFrame: 0,            // diagnostic: events received since last update()
     };
+    // Diagnostic stats exposed for debug overlay
+    this.stats = { mouseEvents: 0, lastDx: 0, lastDy: 0 };
     this._touch = { lookId: null, lookLastX: 0, lookLastY: 0,
                     stickId: null, stickStartX: 0, stickStartY: 0, stickX: 0, stickY: 0,
                     pinchA: null, pinchB: null, pinchStartDist: 0, pinchStartSpeed: 0 };
@@ -71,6 +74,7 @@ export class FlyController {
       if (e.pointerType !== 'mouse' || !this._mouseLook.active) return;
       this._mouseLook.latestX = e.clientX;
       this._mouseLook.latestY = e.clientY;
+      this._mouseLook.eventsThisFrame++;
     });
     const releaseMouse = (e) => {
       if (e.pointerType !== 'mouse') return;
@@ -169,9 +173,10 @@ export class FlyController {
     // The event handler stored latestX/Y; we compute one delta per frame here, no
     // matter how many events fired in between. This keeps per-frame yaw deltas
     // proportional to per-frame mouse motion (not to per-frame event count).
+    let dx = 0, dy = 0;
     if (this._mouseLook.active) {
-      const dx = this._mouseLook.latestX - this._mouseLook.lastSampledX;
-      const dy = this._mouseLook.latestY - this._mouseLook.lastSampledY;
+      dx = this._mouseLook.latestX - this._mouseLook.lastSampledX;
+      dy = this._mouseLook.latestY - this._mouseLook.lastSampledY;
       this._mouseLook.lastSampledX = this._mouseLook.latestX;
       this._mouseLook.lastSampledY = this._mouseLook.latestY;
       if (dx !== 0 || dy !== 0) {
@@ -180,6 +185,10 @@ export class FlyController {
         this.pitch = Math.max(-Math.PI / 2 + 0.05, Math.min(Math.PI / 2 - 0.05, this.pitch));
       }
     }
+    this.stats.mouseEvents = this._mouseLook.eventsThisFrame;
+    this.stats.lastDx = dx;
+    this.stats.lastDy = dy;
+    this._mouseLook.eventsThisFrame = 0;
 
     // ── Lerp smoothed values toward target (BobaDrop's `dropperX += (targetX - dropperX) * 0.5`) ──
     this.smoothedYaw   += (this.yaw   - this.smoothedYaw)   * 0.5;
