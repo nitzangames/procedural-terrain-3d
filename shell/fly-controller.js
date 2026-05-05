@@ -21,6 +21,11 @@ export class FlyController {
     this.dom = domElement;
     this.yaw = 0;
     this.pitch = 0;
+    // BobaDrop-style smoothing: smoothedYaw/Pitch lerp toward yaw/pitch at 0.5/frame.
+    // Matches the dropperX pattern (`dropperX += (targetX - dropperX) * 0.5`) — visual
+    // catch-up over a few frames absorbs residual jitter without obvious lag.
+    this.smoothedYaw = 0;
+    this.smoothedPitch = 0;
     this.speed = 80;            // m/s base
     this.boost = false;
     this.input = { fwd: 0, back: 0, left: 0, right: 0, up: 0, down: 0 };
@@ -176,8 +181,12 @@ export class FlyController {
       }
     }
 
-    this._yawQ.setFromAxisAngle(this._yawAxis,   this.yaw);
-    this._pitchQ.setFromAxisAngle(this._pitchAxis, this.pitch);
+    // ── Lerp smoothed values toward target (BobaDrop's `dropperX += (targetX - dropperX) * 0.5`) ──
+    this.smoothedYaw   += (this.yaw   - this.smoothedYaw)   * 0.5;
+    this.smoothedPitch += (this.pitch - this.smoothedPitch) * 0.5;
+
+    this._yawQ.setFromAxisAngle(this._yawAxis,   this.smoothedYaw);
+    this._pitchQ.setFromAxisAngle(this._pitchAxis, this.smoothedPitch);
     this.camera.quaternion.copy(this._yawQ).multiply(this._pitchQ);
 
     const speed = this.speed * (this.boost ? 3 : 1);
