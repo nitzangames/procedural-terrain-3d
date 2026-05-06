@@ -5,7 +5,7 @@ import { buildSettings } from './settings.js';
 import { PerfProbe } from './perf-probe.js';
 
 // Bump on every user-visible fix so the HUD reflects whether the page is on latest code.
-const VERSION = '0.12.1';
+const VERSION = '0.13.0';
 console.log('[procedural-terrain] v' + VERSION);
 
 const THREE = window.THREE;
@@ -33,8 +33,14 @@ resize();
 // Determine initial style
 const settingsKey = 'terrain.style';
 const storedStyle = localStorage.getItem(settingsKey);
-const VALID_STYLES = new Set(['lowpoly', 'stylized', 'realistic', 'ww1']);
-const initialStyle = VALID_STYLES.has(storedStyle) ? storedStyle : 'lowpoly';
+const VALID_STYLES = new Set(['lowpoly', 'stylized', 'realistic', 'cartograph']);
+// One-shot migration: 'ww1' was renamed to 'cartograph'. Anyone who picked it before
+// the rename gets seamlessly carried over instead of falling back to lowpoly.
+if (storedStyle === 'ww1') {
+  localStorage.setItem(settingsKey, 'cartograph');
+}
+const migratedStyle = storedStyle === 'ww1' ? 'cartograph' : storedStyle;
+const initialStyle = VALID_STYLES.has(migratedStyle) ? migratedStyle : 'lowpoly';
 
 const terrain = createTerrain({
   THREE, scene, renderer,
